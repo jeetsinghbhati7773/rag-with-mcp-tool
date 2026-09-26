@@ -1,0 +1,26 @@
+[
+  {
+    "id": "eval_001",
+    "question": "What is differential privacy in federated learning?",
+    "document_name": "federated_learning.pdf",
+    "expected_pages": [8, 12],
+    "expected_keywords": ["noise", "clipping", "privacy budget", "epsilon"],
+    "gold_answer": "Differential privacy in federated learning adds calibrated Gaussian or Laplacian noise to model gradient updates to bound privacy leakage."
+  },
+  {
+    "id": "eval_002",
+    "question": "How does TCP handshake work?",
+    "document_name": "networking.pdf",
+    "expected_pages": [4, 5],
+    "expected_keywords": ["syn", "syn-ack", "ack", "three-way"],
+    "gold_answer": "TCP connection establishment uses a three-way handshake involving SYN, SYN-ACK, and ACK packet exchanges."
+  },
+  {
+    "id": "eval_003",
+    "question": "What are the core components of RAG architecture?",
+    "document_name": "rag_paper.pdf",
+    "expected_pages": [1, 2],
+    "expected_keywords": ["retriever", "generator", "vector store", "embeddings"],
+    "gold_answer": "RAG architecture combines a vector-based document retriever with a generative LLM to generate context-grounded answers."
+  }
+]

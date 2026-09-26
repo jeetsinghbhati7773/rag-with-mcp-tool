@@ -1,0 +1,90 @@
+[
+    {
+        "amount": 1200.0,
+        "category": "shopping",
+        "description": "clothes",
+        "date": "2026-09-18",
+        "id": "72fa8304-aeb6-44a7-978f-cb49473cead3",
+        "created_at": "2026-09-19T21:37:32.490400"
+    },
+    {
+        "amount": 500.0,
+        "category": "shopping",
+        "description": "chips and snakes",
+        "date": "2026-09-19",
+        "id": "824248f7-e191-4f08-ad86-426ff7659056",
+        "created_at": "2026-09-19T21:38:15.930974"
+    },
+    {
+        "amount": 200.0,
+        "category": "shopping",
+        "description": "snake and chips",
+        "date": "2026-09-18",
+        "id": "cd84f193-5a18-4622-a80a-9aa9defdc9f1",
+        "created_at": "2026-09-19T23:11:14.268431"
+    },
+    {
+        "amount": 1200.0,
+        "category": "shopping",
+        "description": "clothes",
+        "date": "2026-09-18",
+        "id": "9d4fd49a-4e2b-4024-a58a-9477dc74d398",
+        "created_at": "2026-09-19T23:19:50.986067"
+    },
+    {
+        "amount": 1200.0,
+        "category": "shopping",
+        "description": "clothes",
+        "date": "2026-09-18",
+        "id": "32b46226-60e3-4b43-84ae-123328bc321a",
+        "created_at": "2026-09-19T23:25:20.871722"
+    },
+    {
+        "amount": 200.0,
+        "category": "shopping",
+        "description": "snake and chips",
+        "date": "2026-09-18",
+        "id": "4fac8586-c479-4d7a-a9a6-cf742e6f596f",
+        "created_at": "2026-09-22T14:38:25.377619"
+    },
+    {
+        "amount": 200.0,
+        "category": "shopping",
+        "description": "snake and chips",
+        "date": "2026-09-18",
+        "id": "c3b34929-fbb2-42d2-a2c6-bfc7c485f3cd",
+        "created_at": "2026-09-22T14:48:55.361529"
+    },
+    {
+        "amount": 200.0,
+        "category": "shopping",
+        "description": "snake and chips",
+        "date": "2026-09-18",
+        "id": "b200a4b5-7167-4438-a7da-1af5142c7409",
+        "created_at": "2026-09-22T14:54:13.828207"
+    },
+    {
+        "amount": 200.0,
+        "category": "shopping",
+        "description": "snake and chips",
+        "date": "2026-09-18",
+        "id": "7890d485-0684-41dd-985c-3e59cc917b61",
+        "created_at": "2026-09-22T14:57:15.946260"
+    },
+    {
+        "amount": 200.0,
+        "category": "shopping",
+        "description": "snake and chips",
+        "date": "2026-09-18",
+        "id": "db52ca29-b37d-4d46-aff2-8e837e847d31",
+        "created_at": "2026-09-22T14:59:59.876484"
+    },
+    {
+        "amount": 200.0,
+        "category": "shopping",
+        "description": "snake and chips",
+        "date": "2026-09-18",
+        "id": "ba10e2c3-ef81-4211-97fe-81d6dd628f4e",
+        "created_at": "2026-09-22T15:22:24.320196"
+    }
+]

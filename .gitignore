@@ -1,0 +1,50 @@
+# ==========================================
+# 🐍 Python & Virtual Environments
+# ==========================================
+venv/
+.venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# 🔑 Environment & Secrets (DO NOT COMMIT)
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ==========================================
+# 🗄 Persistent Vector Storage & DBs
+# ==========================================
+chroma_db/
+test_db/
+chat_history.db
+*.db
+*.sqlite
+*.sqlite3
+
+# ==========================================
+# 🎈 Streamlit & Temporary Cache
+# ==========================================
+.streamlit/cache/
+.streamlit/secrets.toml
+*.log
+*.tmp
+*.temp
+
+# ==========================================
+# 💻 OS & IDE Settings
+# ==========================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
