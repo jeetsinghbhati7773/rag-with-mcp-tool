@@ -14,32 +14,47 @@ _engine = None
 _SessionLocal = None
 
 
+try:
+    import streamlit as st
+    _cache_resource = st.cache_resource
+except Exception:
+    def _cache_resource(func):
+        return func
+
+
+@_cache_resource
+def _init_engine(url: str):
+    """Initializes and caches the SQLAlchemy engine."""
+    engine = create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+        echo=False,
+    )
+    # Automatically create tables if they don't exist
+    try:
+        from src.database.base import Base
+        import src.database.models  # Ensure all models are imported
+        Base.metadata.create_all(bind=engine)
+        logger.info("SQLAlchemy Base metadata tables verified/created successfully.")
+    except Exception as tbl_err:
+        logger.warning("Could not auto-create Base metadata tables: %s", tbl_err)
+    return engine
+
+
 def get_engine():
-    """Returns singleton SQLAlchemy engine instance with pool_pre_ping enabled."""
+    """Returns cached SQLAlchemy engine instance with pool_pre_ping enabled."""
     global _engine
-    if _engine is None:
-        try:
-            url = settings.database_url
-            _engine = create_engine(
-                url,
-                pool_pre_ping=True,
-                pool_size=10,
-                max_overflow=20,
-                echo=False,
-            )
-            logger.info("SQLAlchemy engine initialized for PostgreSQL database.")
-            # Automatically create tables if they don't exist
-            try:
-                from src.database.base import Base
-                import src.database.models  # Ensure all models are imported
-                Base.metadata.create_all(bind=_engine)
-                logger.info("SQLAlchemy Base metadata tables verified/created successfully.")
-            except Exception as tbl_err:
-                logger.warning("Could not auto-create Base metadata tables: %s", tbl_err)
-        except Exception as e:
-            logger.warning("Could not initialize PostgreSQL engine: %s", e)
-            _engine = None
-    return _engine
+    try:
+        url = settings.database_url
+        if not url:
+            return None
+        _engine = _init_engine(url)
+        return _engine
+    except Exception as e:
+        logger.warning("Could not initialize PostgreSQL engine: %s", e)
+        return None
 
 
 def get_session_factory():
