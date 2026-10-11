@@ -43,16 +43,21 @@ def _init_engine(url: str):
     return engine
 
 
+_last_db_error: Optional[str] = None
+
+
 def get_engine():
     """Returns cached SQLAlchemy engine instance with pool_pre_ping enabled."""
-    global _engine
+    global _engine, _last_db_error
     try:
         url = settings.database_url
         if not url:
+            _last_db_error = "DATABASE_URL is not set."
             return None
         _engine = _init_engine(url)
         return _engine
     except Exception as e:
+        _last_db_error = str(e)
         logger.warning("Could not initialize PostgreSQL engine: %s", e)
         return None
 
@@ -96,18 +101,23 @@ def get_db() -> Generator[Optional[Session], None, None]:
 def database_health_check() -> Dict[str, Any]:
     """
     Executes database health check query `SELECT 1` on PostgreSQL.
-    Returns health dictionary: {"connected": bool, "message": str}.
+    Returns health dictionary: {"connected": bool, "message": str, "error": Optional[str]}.
     """
+    global _last_db_error
     try:
         eng = get_engine()
         if eng is None:
-            return {"connected": False, "message": "PostgreSQL engine not configured or offline."}
+            err = _last_db_error or "PostgreSQL engine not configured or offline."
+            return {"connected": False, "message": "PostgreSQL engine offline", "error": err}
 
         with eng.connect() as conn:
             result = conn.execute(text("SELECT 1")).scalar()
             if result == 1:
-                return {"connected": True, "message": "PostgreSQL Connected"}
+                _last_db_error = None
+                return {"connected": True, "message": "PostgreSQL Connected", "error": None}
     except Exception as e:
-        logger.debug("PostgreSQL health check failed: %s", e)
+        _last_db_error = str(e)
+        logger.warning("PostgreSQL health check failed: %s", e)
+        return {"connected": False, "message": "PostgreSQL Unavailable", "error": str(e)}
 
-    return {"connected": False, "message": "⚠️ PostgreSQL Unavailable (Check credentials & database status)"}
+    return {"connected": False, "message": "PostgreSQL Unavailable", "error": _last_db_error or "Connection check failed"}

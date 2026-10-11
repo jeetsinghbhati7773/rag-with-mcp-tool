@@ -159,14 +159,19 @@ def render_tool_call_card(tool_result: ToolCallResult):
 
 def render_system_status(doc_count: int, chunk_count: int):
     """Renders sidebar system status panel with database health check."""
-    groq_set = bool(os.getenv("GROQ_API_KEY"))
-    openai_set = bool(os.getenv("OPENAI_API_KEY"))
+    groq_set = bool(os.getenv("GROQ_API_KEY") or (st.secrets.get("GROQ_API_KEY") if hasattr(st, "secrets") else None))
+    openai_set = bool(os.getenv("OPENAI_API_KEY") or (st.secrets.get("OPENAI_API_KEY") if hasattr(st, "secrets") else None))
     db_health = database_health_check()
 
-    db_status_str = "✅ Connected (ai_knowledge_assistant)" if db_health.get("connected") else "ℹ️ Offline (Local Fallback)"
+    db_status_str = "✅ Connected (PostgreSQL)" if db_health.get("connected") else "ℹ️ Offline (Local Fallback)"
 
     with st.expander("⚡ **System Status & Telemetry**", expanded=False):
         st.markdown(f"- **PostgreSQL DB**: {db_status_str}")
+        if not db_health.get("connected"):
+            raw_err = db_health.get("error") or db_health.get("message") or ""
+            if raw_err:
+                short_err = str(raw_err).split("\n")[0][:140]
+                st.caption(f"⚠️ *DB Info:* `{short_err}`")
         st.markdown(f"- **LLM Provider**: {'✅ Groq Connected' if groq_set else ('✅ OpenAI' if openai_set else '⚠️ Missing Key')}")
         st.markdown(f"- **Vector DB**: ✅ ChromaDB Connected")
         st.markdown("- **Embeddings**: `all-MiniLM-L6-v2` (384d)")

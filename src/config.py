@@ -8,15 +8,35 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def normalize_db_url(url: str) -> str:
+    """Normalizes connection strings (e.g. Supabase postgresql:// -> postgresql+psycopg://)."""
+    if not url:
+        return ""
+    url = url.strip().strip("'\"")
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 def _get_env_or_secret(key: str, default: str = "") -> str:
     val = os.getenv(key)
     if not val:
         try:
             import streamlit as st
             val = st.secrets.get(key)
+            if not val and key == "DATABASE_URL":
+                val = (
+                    st.secrets.get("POSTGRES_URL")
+                    or st.secrets.get("SUPABASE_DATABASE_URL")
+                    or st.secrets.get("SUPABASE_URL_DB")
+                )
+                if not val and "postgres" in st.secrets:
+                    val = st.secrets["postgres"].get("url") or st.secrets["postgres"].get("DATABASE_URL")
         except Exception:
             pass
-    return str(val) if val is not None else default
+    return str(val) if val is not None and str(val).strip() else default
 
 
 @dataclass
@@ -28,13 +48,14 @@ class Settings:
     openai_model: str = field(default_factory=lambda: _get_env_or_secret("OPENAI_MODEL", "gpt-4o-mini"))
     embedding_model: str = field(default_factory=lambda: _get_env_or_secret("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
 
-    # PostgreSQL Database URL
-    database_url: str = field(
-        default_factory=lambda: _get_env_or_secret(
-            "DATABASE_URL",
-            "postgresql+psycopg://postgres:postgres@localhost:5432/ai_knowledge_assistant",
-        )
-    )
+    @property
+    def database_url(self) -> str:
+        """Dynamically resolve and normalize PostgreSQL connection URL."""
+        raw = _get_env_or_secret("DATABASE_URL", "")
+        if not raw:
+            raw = "postgresql+psycopg://postgres:postgres@localhost:5432/ai_knowledge_assistant"
+        return normalize_db_url(raw)
+
 
     # RAG Parameters
     chunk_size: int = field(default_factory=lambda: int(os.getenv("CHUNK_SIZE", "800")))
