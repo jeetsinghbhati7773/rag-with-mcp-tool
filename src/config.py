@@ -53,7 +53,7 @@ class Settings:
         """Dynamically resolve and normalize PostgreSQL connection URL."""
         raw = _get_env_or_secret("DATABASE_URL", "")
         if not raw:
-            raw = "postgresql+psycopg://postgres:postgres@localhost:5432/ai_knowledge_assistant"
+            return ""
         return normalize_db_url(raw)
 
 

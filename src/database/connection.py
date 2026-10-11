@@ -57,8 +57,11 @@ def get_engine():
         _engine = _init_engine(url)
         return _engine
     except Exception as e:
-        _last_db_error = str(e)
-        logger.warning("Could not initialize PostgreSQL engine: %s", e)
+        err_str = str(e)
+        if "db." in url and ".supabase.co" in url and any(k in err_str.lower() for k in ["resolve", "timeout", "name", "dns"]):
+            err_str = "Supabase direct host (db.***.supabase.co) cannot be resolved on IPv4. Use the Supabase Pooler URL (pooler.supabase.com) instead."
+        _last_db_error = err_str
+        logger.warning("Could not initialize PostgreSQL engine: %s", _last_db_error)
         return None
 
 
