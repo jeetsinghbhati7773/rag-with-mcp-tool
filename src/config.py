@@ -8,18 +8,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _get_env_or_secret(key: str, default: str = "") -> str:
+    val = os.getenv(key)
+    if not val:
+        try:
+            import streamlit as st
+            val = st.secrets.get(key)
+        except Exception:
+            pass
+    return str(val) if val is not None else default
+
+
 @dataclass
 class Settings:
     """Centralized configuration settings for AI Knowledge Assistant."""
 
     # Models
-    groq_model: str = field(default_factory=lambda: os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"))
-    openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
-    embedding_model: str = field(default_factory=lambda: os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
+    groq_model: str = field(default_factory=lambda: _get_env_or_secret("GROQ_MODEL", "llama-3.3-70b-versatile"))
+    openai_model: str = field(default_factory=lambda: _get_env_or_secret("OPENAI_MODEL", "gpt-4o-mini"))
+    embedding_model: str = field(default_factory=lambda: _get_env_or_secret("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
 
     # PostgreSQL Database URL
     database_url: str = field(
-        default_factory=lambda: os.getenv(
+        default_factory=lambda: _get_env_or_secret(
             "DATABASE_URL",
             "postgresql+psycopg://postgres:postgres@localhost:5432/ai_knowledge_assistant",
         )
