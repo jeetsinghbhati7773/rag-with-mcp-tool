@@ -60,6 +60,11 @@ graph TD
   - Dual semantic + keyword retrieval powered by SentenceTransformers (`all-MiniLM-L6-v2`) and ChromaDB.
   - Contextual reranking, query transformation, evidence confidence scoring (🟢 High, 🟡 Moderate, 🔴 Low), and traceable citations.
 
+- **Application Access Verification & Session Gate**:
+  - **Passcode Protection on Load**: Blocks unauthenticated access upon app startup with a sleek centered access verification screen, preventing unauthenticated access to database records, conversations, and document indexes.
+  - **Environment-Controlled Access**: Configured via `APP_ACCESS_CODE` in `.env` (with Streamlit secrets fallback).
+  - **Session Locking**: Seamlessly unlocks into `st.session_state` with a dedicated **🔒 Lock Application** button in the sidebar to re-lock at any time.
+
 - **Prompt Security & Observability**:
   - Built-in Prompt Guard sanitizing user inputs against injection attacks.
   - System status drawer featuring live PostgreSQL health check (`database_health_check()`) and MCP tool registry discovery.
@@ -128,7 +133,7 @@ pip install -r requirements.txt
 
 ### STEP 5: Configure Environment Variables
 Create or edit your `.env` file with your credentials:
-```env
+
 # LLM Provider Keys
 GROQ_API_KEY="gsk_your_groq_api_key_here"
 GROQ_MODEL="llama-3.3-70b-versatile"
@@ -152,20 +157,21 @@ alembic upgrade head
 ```bash
 streamlit run app.py
 ```
+> When prompted on the landing screen, enter your configured `APP_ACCESS_CODE` (e.g. `1234`) and click **Unlock Assistant 🚀** to access the assistant.
 
 ---
 
 ## 🧪 Testing
 
-Run the full test suite covering multi-conversation persistence, hybrid routing, MCP tool executor, RAG retrieval, and security prompt guards:
+Run the full test suite covering access gate protection, multi-conversation persistence, hybrid routing, MCP tool executor, RAG retrieval, and security prompt guards:
 
 ```bash
 pytest
 ```
 
-To run a specific test suite:
+To run specific test suites:
 ```bash
-pytest tests/test_multi_conversation.py tests/test_hybrid_router.py tests/test_retrieval.py -v
+pytest tests/test_access_gate.py tests/test_multi_conversation.py tests/test_hybrid_router.py tests/test_retrieval.py -v
 ```
 
 ---
@@ -180,19 +186,3 @@ pytest tests/test_multi_conversation.py tests/test_hybrid_router.py tests/test_r
 - **Web Search**: `"Search the web for recent advancements in RAG architecture"`
 - **Hybrid Search**: `"Compare the numbers from my uploaded financial report with current market data"`
 
----
-
-## 🚀 Pushing Changes to GitHub
-
-To commit and push your latest changes to GitHub, run the following in your terminal:
-
-```bash
-# 1. Stage all modified files
-git add .
-
-# 2. Commit the changes
-git commit -m "feat: inline chat input file attachment, conversation-scoped RAG, tool recovery, and UX enhancements"
-
-# 3. Push to your repository
-git push
-```

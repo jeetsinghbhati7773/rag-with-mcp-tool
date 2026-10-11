@@ -217,3 +217,56 @@ def render_evaluation_dashboard(metrics: EvaluationMetrics):
         st.metric(label="Context Relevance", value=f"{metrics.context_relevance:.2f}")
     with col8:
         st.metric(label="Citation Accuracy", value=f"{metrics.citation_correctness:.2f}")
+
+
+def render_access_gate() -> bool:
+    """
+    Renders an access code verification gate when the application is loaded.
+    Blocks unauthenticated users until they enter the correct code defined in .env (APP_ACCESS_CODE).
+    Returns True if access is granted, False otherwise.
+    """
+    from src.config import settings
+
+    expected_code = (settings.app_access_code or "").strip()
+    if not expected_code:
+        return True
+
+    if st.session_state.get("authenticated", False):
+        return True
+
+    # Render centered authentication card
+    _, col_mid, _ = st.columns([1, 1.8, 1])
+    with col_mid:
+        st.markdown(
+            """
+            <div style="background-color: #1E293B; padding: 2.2rem 2rem 1.8rem 2rem; border-radius: 12px; border: 1px solid #334155; margin-top: 3.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);">
+                <div style="text-align: center; margin-bottom: 1.5rem;">
+                    <div style="font-size: 3rem; margin-bottom: 0.5rem; line-height: 1;">🔐</div>
+                    <h2 style="margin: 0.2rem 0; font-size: 1.6rem; color: #F8FAFC;">Protected Application</h2>
+                    <p style="color: #94A3B8; font-size: 0.95rem; margin-top: 0.4rem;">
+                        Please enter the access code to continue into <strong>AI Knowledge Assistant</strong>.
+                    </p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        with st.form(key="access_code_form", clear_on_submit=False):
+            code_input = st.text_input(
+                "Access Code",
+                type="password",
+                placeholder="Enter access code...",
+                help="Configured via APP_ACCESS_CODE in your .env file",
+            )
+            submitted = st.form_submit_button("Unlock Assistant 🚀", use_container_width=True, type="primary")
+
+            if submitted:
+                if code_input.strip() == expected_code:
+                    st.session_state["authenticated"] = True
+                    st.success("✅ Access granted! Unlocking assistant...")
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect access code. Please check your .env configuration and try again.")
+
+    return False

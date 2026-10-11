@@ -75,6 +75,7 @@ class Settings:
     max_chunks_per_document: int = field(default_factory=lambda: int(os.getenv("MAX_CHUNKS_PER_DOCUMENT", "5000")))
     max_chat_history: int = field(default_factory=lambda: int(os.getenv("MAX_CHAT_HISTORY", "15")))
     mcp_timeout_seconds: int = field(default_factory=lambda: int(os.getenv("MCP_TIMEOUT_SECONDS", "15")))
+    app_access_code: str = field(default_factory=lambda: _get_env_or_secret("APP_ACCESS_CODE", "1234"))
 
     # Confidence Thresholds
     confidence_high_threshold: float = 0.65

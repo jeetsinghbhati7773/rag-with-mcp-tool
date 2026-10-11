@@ -24,6 +24,7 @@ from src.ui.components import (
     render_evaluation_dashboard,
     render_attached_files_bar,
     render_conversation_sidebar,
+    render_access_gate,
 )
 from src.rag.vector_store import ChromaVectorStore
 from src.services.document_service import document_service
@@ -44,6 +45,12 @@ st.set_page_config(
 )
 
 apply_theme()
+
+# -----------------------------
+# Security: Access Code Gate
+# -----------------------------
+if not render_access_gate():
+    st.stop()
 
 convo_repo = ConversationRepository()
 
@@ -293,6 +300,11 @@ with st.sidebar:
             st.caption(f"- **Precision@5**: {m.precision_at_k:.2f}")
             st.caption(f"- **MRR**: {m.mrr:.2f}")
             st.caption(f"- **Faithfulness**: {m.faithfulness:.2f}")
+
+    st.divider()
+    if st.button("🔒 Lock Application", use_container_width=True, key="lock_app_btn", help="Lock the assistant session"):
+        st.session_state["authenticated"] = False
+        st.rerun()
 
 # -----------------------------
 # 3. Main Chat View
