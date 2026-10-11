@@ -130,20 +130,24 @@ def load_conversation_state(convo_id: str):
 
 # Initialize active conversation if None
 all_convos = []
+convo_to_load = None
 try:
     with get_db() as db:
         if db is not None:
             all_convos = convo_repo.list_conversations(db)
             if not st.session_state["active_conversation_id"]:
                 if all_convos:
-                    load_conversation_state(all_convos[0].id)
+                    convo_to_load = all_convos[0].id
                 else:
                     new_c = convo_repo.create_conversation(db, title="New Conversation")
-                    load_conversation_state(new_c.id)
+                    convo_to_load = new_c.id
                     all_convos = [new_c]
 except Exception as e:
     if not st.session_state["active_conversation_id"]:
         st.session_state["active_conversation_id"] = str(uuid.uuid4())
+
+if convo_to_load:
+    load_conversation_state(convo_to_load)
 
 # -----------------------------
 # 2. Sidebar Navigation & Management
@@ -151,15 +155,28 @@ except Exception as e:
 with st.sidebar:
     st.markdown("## **🧠 AI Knowledge Assistant**")
 
+    has_messages = bool(st.session_state.get("messages"))
     col_new, col_clear = st.columns(2)
     with col_new:
-        if st.button("➕ New Chat", use_container_width=True, type="primary"):
+        if st.button(
+            "➕ New Chat",
+            use_container_width=True,
+            type="primary",
+            disabled=not has_messages,
+            help="Start a new conversation" if has_messages else "Current conversation is already empty",
+        ):
+            created_id = None
             try:
                 with get_db() as db:
                     if db is not None:
                         new_c = convo_repo.create_conversation(db, title="New Conversation")
-                        load_conversation_state(new_c.id)
+                        created_id = new_c.id
             except Exception:
+                pass
+
+            if created_id:
+                load_conversation_state(created_id)
+            else:
                 new_id = str(uuid.uuid4())
                 st.session_state["active_conversation_id"] = new_id
                 st.session_state["messages"] = []
@@ -167,7 +184,12 @@ with st.sidebar:
             st.rerun()
 
     with col_clear:
-        if st.button("🗑️ Clear Chat", use_container_width=True):
+        if st.button(
+            "🗑️ Clear Chat",
+            use_container_width=True,
+            disabled=not has_messages,
+            help="Clear current chat" if has_messages else "No messages to clear",
+        ):
             st.session_state["messages"] = []
             st.session_state["attached_files"] = []
             st.rerun()
@@ -213,6 +235,33 @@ with st.sidebar:
 
             doc_names = [d.get("Document Name") or d.get("filename", "") for d in doc_list if (d.get("Document Name") or d.get("filename"))]
             if doc_names:
+                attached_names = {f.get("filename") for f in st.session_state.get("attached_files", [])}
+                attachable = [name for name in doc_names if name not in attached_names]
+                if attachable:
+                    st.markdown("##### 📎 Attach to Current Chat")
+                    to_attach = st.selectbox("Select document:", attachable, key="sidebar_attach_doc_select")
+                    if st.button(f"➕ Attach to Active Chat", use_container_width=True, key="sidebar_attach_doc_btn"):
+                        active_cid = st.session_state["active_conversation_id"]
+                        if active_cid:
+                            try:
+                                with get_db() as db:
+                                    if db is not None:
+                                        convo_repo.add_conversation_file(
+                                            db,
+                                            convo_id=active_cid,
+                                            file_id=to_attach[:16],
+                                            filename=to_attach,
+                                            file_hash="",
+                                            file_size=0,
+                                            status="ready",
+                                        )
+                            except Exception:
+                                pass
+                            load_conversation_state(active_cid)
+                            st.toast(f"Attached '{to_attach}' to this chat!", icon="📎")
+                            st.rerun()
+
+                st.divider()
                 selected_del = st.selectbox("Select document to delete:", doc_names, key="del_doc_select")
                 if st.button(f"🗑️ Delete '{selected_del}'", use_container_width=True, key="del_doc_btn"):
                     deleted_cnt = document_service.delete_document(selected_del)
@@ -259,73 +308,8 @@ if st.session_state.get("eval_metrics"):
             st.rerun()
 
 # -----------------------------
-# 4. Attached Files Context & '+' Drawer Bar
+# 4. Display Past Chat Messages
 # -----------------------------
-st.divider()
-col_attach, col_info = st.columns([1, 4])
-with col_attach:
-    with st.popover("➕ Add Files", use_container_width=True):
-        st.markdown("#### **📄 Attach Session Document(s)**")
-        new_uploads = st.file_uploader(
-            "Upload Document(s)",
-            type=["pdf", "txt", "md", "docx"],
-            accept_multiple_files=True,
-            key="chat_plus_file_uploader",
-        )
-        if new_uploads:
-            if st.button("📥 Index & Attach", type="primary", use_container_width=True, key="attach_index_btn"):
-                total_chunks = 0
-                for f in new_uploads:
-                    try:
-                        file_bytes = f.read()
-                        chunks_added, msg, _ = document_service.process_and_index_document(file_bytes, f.name)
-                        total_chunks += chunks_added
-                        
-                        # Register attached file in DB for current conversation
-                        active_cid = st.session_state["active_conversation_id"]
-                        if active_cid:
-                            try:
-                                with get_db() as db:
-                                    if db is not None:
-                                        from src.utils.hashing import calculate_sha256
-                                        f_hash = calculate_sha256(file_bytes)
-                                        convo_repo.add_conversation_file(
-                                            db,
-                                            convo_id=active_cid,
-                                            file_id=f_hash[:16],
-                                            filename=f.name,
-                                            file_hash=f_hash,
-                                            file_size=len(file_bytes),
-                                            status="ready",
-                                        )
-                            except Exception as e:
-                                pass
-                        st.toast(f"Attached '{f.name}' ({chunks_added} chunks)", icon="📄")
-                    except Exception as e:
-                        st.error(f"Error attaching '{f.name}': {e}")
-                
-                # Reload conversation files state
-                if st.session_state["active_conversation_id"]:
-                    load_conversation_state(st.session_state["active_conversation_id"])
-                st.rerun()
-
-        if st.session_state["attached_files"]:
-            st.divider()
-            if st.button("🗑️ Clear Attached Files", use_container_width=True, key="clear_attached_btn"):
-                vectorstore.clear_documents()
-                st.session_state["attached_files"] = []
-                st.toast("Cleared attached session files!", icon="🧹")
-                st.rerun()
-
-with col_info:
-    if st.session_state["attached_files"]:
-        render_attached_files_bar(st.session_state["attached_files"])
-    else:
-        st.caption("ℹ️ No attached files — Assistant will route queries to **General Chat**.")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Display Past Chat Messages
 for msg in st.session_state["messages"]:
     with st.chat_message(msg["role"]):
         if msg.get("query_type"):
@@ -337,8 +321,21 @@ for msg in st.session_state["messages"]:
             render_confidence_badge(msg["confidence"])
 
         if msg.get("tool_results"):
+            # Deduplicate results if any exist
+            unique_trs = []
+            seen_keys = set()
             for tr in msg["tool_results"]:
-                render_tool_call_card(tr)
+                tname = getattr(tr, "tool_name", "") or (tr.get("tool_name") if isinstance(tr, dict) else "")
+                tval = str(getattr(tr, "result", "") or (tr.get("result") if isinstance(tr, dict) else ""))
+                key = (tname, tval)
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    unique_trs.append(tr)
+
+            if unique_trs:
+                with st.expander("🛠️ View Tool Details", expanded=False):
+                    for tr in unique_trs:
+                        render_tool_call_card(tr)
 
         if msg.get("citations"):
             with st.expander("📄 Source Citations & References"):
@@ -347,8 +344,90 @@ for msg in st.session_state["messages"]:
                     score_str = f" [Score: {c.score:.2f}]" if c.get("score") is not None else ""
                     st.caption(f"- **{c.document_name}**{page_str}{score_str}: *\"{c.snippet}\"*")
 
-# Handle User Input Prompt
-if prompt := st.chat_input("Ask a question about your documents, stock prices, expenses, or general topics..."):
+# -----------------------------
+# 5. Attached Document Badges (Displayed above input only when files are attached)
+# -----------------------------
+if st.session_state["attached_files"]:
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_chips, col_clr = st.columns([5, 1])
+    with col_chips:
+        render_attached_files_bar(st.session_state["attached_files"])
+    with col_clr:
+        if st.button("🗑️ Detach All", use_container_width=True, key="clear_attached_btn", help="Detach files from this chat"):
+            active_cid = st.session_state["active_conversation_id"]
+            if active_cid:
+                try:
+                    with get_db() as db:
+                        if db is not None:
+                            for af in st.session_state["attached_files"]:
+                                convo_repo.delete_conversation_file(db, active_cid, af.get("filename", ""))
+                except Exception:
+                    pass
+            st.session_state["attached_files"] = []
+            st.toast("Detached files from this conversation.", icon="🧹")
+            st.rerun()
+
+# -----------------------------
+# 6. Chat Input with Native '+' Attachment Icon (Like Gemini)
+# -----------------------------
+input_placeholder = (
+    f"Ask about {len(st.session_state['attached_files'])} attached document(s)..."
+    if st.session_state["attached_files"]
+    else "Ask a question about stock prices, expenses, or attach files with +..."
+)
+
+chat_input_val = st.chat_input(
+    input_placeholder,
+    accept_file="multiple",
+    file_type=["pdf", "txt", "md", "docx"],
+)
+
+if chat_input_val:
+    user_prompt = ""
+    uploaded_files = []
+
+    if isinstance(chat_input_val, str):
+        user_prompt = chat_input_val
+    elif hasattr(chat_input_val, "text"):
+        user_prompt = (chat_input_val.text or "").strip()
+        uploaded_files = chat_input_val.files or []
+
+    # Process and attach any uploaded files from the '+' button
+    if uploaded_files:
+        active_cid = st.session_state["active_conversation_id"]
+        for f in uploaded_files:
+            try:
+                file_bytes = f.read()
+                chunks_added, msg, _ = document_service.process_and_index_document(file_bytes, f.name)
+                if active_cid:
+                    try:
+                        with get_db() as db:
+                            if db is not None:
+                                from src.utils.hashing import calculate_sha256
+                                f_hash = calculate_sha256(file_bytes)
+                                convo_repo.add_conversation_file(
+                                    db,
+                                    convo_id=active_cid,
+                                    file_id=f_hash[:16],
+                                    filename=f.name,
+                                    file_hash=f_hash,
+                                    file_size=len(file_bytes),
+                                    status="ready",
+                                )
+                    except Exception:
+                        pass
+                st.toast(f"Attached '{f.name}' ({chunks_added} chunks)", icon="📄")
+            except Exception as e:
+                st.error(f"Error attaching '{f.name}': {e}")
+
+        if active_cid:
+            load_conversation_state(active_cid)
+
+    # If user attached files without prompt text, rerun so attached file chips update
+    if not user_prompt:
+        st.rerun()
+
+    prompt = user_prompt
     st.session_state["messages"].append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -388,8 +467,20 @@ if prompt := st.chat_input("Ask a question about your documents, stock prices, e
             render_confidence_badge(confidence_obj)
 
         tool_res_list = final_payload.get("tool_results", [])
-        for tr in tool_res_list:
-            render_tool_call_card(tr)
+        if tool_res_list:
+            unique_trs = []
+            seen_keys = set()
+            for tr in tool_res_list:
+                tname = getattr(tr, "tool_name", "") or (tr.get("tool_name") if isinstance(tr, dict) else "")
+                tval = str(getattr(tr, "result", "") or (tr.get("result") if isinstance(tr, dict) else ""))
+                key = (tname, tval)
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    unique_trs.append(tr)
+
+            with st.expander("🛠️ View Tool Details", expanded=False):
+                for tr in unique_trs:
+                    render_tool_call_card(tr)
 
         citations = final_payload.get("citations", [])
 

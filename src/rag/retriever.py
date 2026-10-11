@@ -48,23 +48,38 @@ class DocumentRetriever:
         top_k: Optional[int] = None,
         rerank_k: Optional[int] = None,
         conversation_id: Optional[str] = None,
+        document_names: Optional[List[str]] = None,
     ) -> Tuple[List[Document], List[Citation], ConfidenceScore]:
         """
         Retrieves top relevant document chunks using hybrid vector search & reranking.
+        Scoped to conversation_id and/or document_names.
         Returns (reranked_documents, citations, confidence_score).
         """
         k = top_k or settings.retrieval_k
         rk = rerank_k or settings.rerank_top_k
+
+        if document_names is not None and len(document_names) == 0:
+            return [], [], calculate_retrieval_confidence([])
 
         # Step 1: Query Transformation
         transformed_query = self.rewrite_query(query)
         logger.debug("Original query: %r -> Transformed: %r", query, transformed_query)
 
         # Step 2: Vector Similarity Search
-        vector_candidates = self.vectorstore.similarity_search(transformed_query, k=k, conversation_id=conversation_id)
+        vector_candidates = self.vectorstore.similarity_search(
+            transformed_query,
+            k=k,
+            conversation_id=conversation_id,
+            document_names=document_names,
+        )
         if not vector_candidates and transformed_query != query:
             # Fallback to original query
-            vector_candidates = self.vectorstore.similarity_search(query, k=k, conversation_id=conversation_id)
+            vector_candidates = self.vectorstore.similarity_search(
+                query,
+                k=k,
+                conversation_id=conversation_id,
+                document_names=document_names,
+            )
 
         if not vector_candidates:
             empty_confidence = calculate_retrieval_confidence([])

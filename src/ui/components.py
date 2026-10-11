@@ -42,31 +42,32 @@ def render_conversation_sidebar(
     filtered_convos = conversations
     if search_q and search_q.strip():
         q_low = search_q.strip().lower()
-        filtered_convos = [c for c in conversations if q_low in c.title.lower()]
+        filtered_convos = [c for c in conversations if q_low in (getattr(c, "title", "") or "").lower()]
 
     if not filtered_convos:
         st.caption("No previous chats found.")
         return
 
     for convo in filtered_convos:
-        is_active = (convo.id == active_convo_id)
+        c_id = getattr(convo, "id", str(convo))
+        is_active = (c_id == active_convo_id)
         btn_type = "primary" if is_active else "secondary"
-        title_str = convo.title or "New Conversation"
+        title_str = getattr(convo, "title", None) or "New Conversation"
         
         c_btn, c_del = st.columns([5, 1])
         with c_btn:
             if st.button(
                 f"{'💬' if not is_active else '▶️'} {title_str[:28]}",
-                key=f"select_convo_{convo.id}",
+                key=f"select_convo_{c_id}",
                 use_container_width=True,
                 type=btn_type,
             ):
                 if on_select_convo:
-                    on_select_convo(convo.id)
+                    on_select_convo(c_id)
         with c_del:
-            if st.button("🗑️", key=f"del_convo_{convo.id}", help="Delete chat"):
+            if st.button("🗑️", key=f"del_convo_{c_id}", help="Delete chat"):
                 if on_delete_convo:
-                    on_delete_convo(convo.id)
+                    on_delete_convo(c_id)
 
 
 

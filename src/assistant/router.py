@@ -45,14 +45,8 @@ class HybridQueryRouter:
         attached_files = attached_files or []
         chat_history = chat_history or []
         
-        db_count = 0
-        if vectorstore is not None:
-            try:
-                db_count = vectorstore.count_chunks()
-            except Exception:
-                pass
-
-        has_files = len(attached_files) > 0 or db_count > 0
+        # Only attached files belonging to this conversation count
+        has_files = len(attached_files) > 0
 
         doc_refs = any(k in q_lower for k in EXPLICIT_DOC_KEYWORDS)
         is_expense = any(k in q_lower for k in ["expense", "expens", "add ₹", "add $", "spent", "list expenses", "my expenses", "cost", "purchased", "bought"])
@@ -121,7 +115,12 @@ class HybridQueryRouter:
         retrieved_samples: List[Tuple[str, str, float]] = []
         if vectorstore is not None and has_files:
             try:
-                results_with_score = vectorstore.similarity_search_with_score(query, k=3)
+                attached_names = [f.get("filename") for f in attached_files if f.get("filename")]
+                results_with_score = vectorstore.similarity_search_with_score(
+                    query,
+                    k=3,
+                    document_names=attached_names if attached_names else None,
+                )
                 if results_with_score:
                     for doc, score in results_with_score:
                         # Convert distance score to similarity [0, 1]

@@ -87,8 +87,18 @@ class ChromaVectorStore:
 
         return len(documents)
 
-    def similarity_search(self, query: str, k: int = 4, conversation_id: Optional[str] = None) -> List[Document]:
-        """Retrieves top-k most similar document chunks filtered by conversation_id."""
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        conversation_id: Optional[str] = None,
+        document_names: Optional[List[str]] = None,
+    ) -> List[Document]:
+        """Retrieves top-k most similar document chunks filtered by conversation_id and/or document_names."""
+        # If document_names explicitly provided and empty, no documents should match
+        if document_names is not None and len(document_names) == 0:
+            return []
+
         try:
             col = self._get_collection()
             if col is not None:
@@ -98,8 +108,20 @@ class ChromaVectorStore:
                     "n_results": k,
                     "include": ["documents", "metadatas", "distances"],
                 }
+
+                where_clauses = []
                 if conversation_id:
-                    query_kwargs["where"] = {"conversation_id": conversation_id}
+                    where_clauses.append({"conversation_id": conversation_id})
+                if document_names:
+                    if len(document_names) == 1:
+                        where_clauses.append({"document_name": document_names[0]})
+                    else:
+                        where_clauses.append({"document_name": {"$in": document_names}})
+
+                if len(where_clauses) == 1:
+                    query_kwargs["where"] = where_clauses[0]
+                elif len(where_clauses) > 1:
+                    query_kwargs["where"] = {"$and": where_clauses}
 
                 results = col.query(**query_kwargs)
 
@@ -121,15 +143,25 @@ class ChromaVectorStore:
 
         if self._fallback_memory:
             q_lower = query.lower()
-            memory = [d for d in self._fallback_memory if not conversation_id or d.metadata.get("conversation_id") == conversation_id]
+            memory = self._fallback_memory
+            if document_names is not None:
+                memory = [d for d in memory if d.metadata.get("document_name") in document_names]
+            elif conversation_id:
+                memory = [d for d in memory if d.metadata.get("conversation_id") == conversation_id]
             matches = [d for d in memory if any(w in d.page_content.lower() for w in q_lower.split())]
             return matches[:k] if matches else memory[:k]
 
         return []
 
-    def similarity_search_with_score(self, query: str, k: int = 4, conversation_id: Optional[str] = None) -> List[Tuple[Document, float]]:
+    def similarity_search_with_score(
+        self,
+        query: str,
+        k: int = 4,
+        conversation_id: Optional[str] = None,
+        document_names: Optional[List[str]] = None,
+    ) -> List[Tuple[Document, float]]:
         """Retrieves top-k most similar document chunks with distance scores."""
-        docs = self.similarity_search(query, k=k, conversation_id=conversation_id)
+        docs = self.similarity_search(query, k=k, conversation_id=conversation_id, document_names=document_names)
         results = []
         for doc in docs:
             dist = doc.metadata.get("_distance", 0.5)

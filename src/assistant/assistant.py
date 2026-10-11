@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
+import re
 from datetime import datetime
-from typing import List, Dict, Any, Generator, Optional
+from typing import List, Dict, Any, Generator, Optional, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 
 from src.llm.models import llm
@@ -74,6 +76,33 @@ class KnowledgeAssistant:
         self.registry = global_registry
         self.convo_repo = ConversationRepository()
 
+    @staticmethod
+    def _recover_failed_generation(err: Exception) -> Optional[Tuple[str, dict]]:
+        """
+        Parses failed tool generation errors (e.g. from Groq models like openai/gpt-oss-120b)
+        where the model emitted tokens like <|channel|>commentary or unparsed JSON.
+        """
+        err_str = str(err)
+        match = re.search(r'["\']failed_generation["\']\s*:\s*["\'](\{.*?\})["\']', err_str, re.DOTALL)
+        if not match:
+            match = re.search(r'failed_generation[\\\'"]*:\s*[\\\'"]*(\{.*?\})[\\\'"]*', err_str, re.DOTALL)
+        if match:
+            try:
+                raw_json = match.group(1).replace(r"\'", "'").replace(r'\"', '"').replace(r"\\", "\\")
+                data = json.loads(raw_json)
+                raw_name = data.get("name", "")
+                clean_name = re.sub(r"<\|.*?\|>.*", "", raw_name).strip()
+                args = data.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except Exception:
+                        pass
+                return clean_name, args if isinstance(args, dict) else {}
+            except Exception as parse_e:
+                logger.debug("Failed to parse failed_generation: %s", parse_e)
+        return None
+
     def answer_query(
         self,
         query: str,
@@ -85,7 +114,10 @@ class KnowledgeAssistant:
         """
         Processes query and yields streaming lifecycle status events and final answer payload.
         """
-        has_docs = self.vectorstore.count_chunks() > 0
+        attached_filenames = [
+            f.get("filename") for f in (attached_files or []) if f.get("filename")
+        ]
+        has_docs = len(attached_filenames) > 0
         available_tools = [t.name for t in self.registry.list_tools()]
 
         # Auto-title conversation if needed
@@ -173,9 +205,23 @@ class KnowledgeAssistant:
         confidence: Optional[ConfidenceScore] = None
         context_str = ""
 
-        if plan.use_rag and has_docs:
-            yield {"status": "retrieving", "message": "Executing Hybrid Vector + Keyword search on ChromaDB..."}
-            retrieved_docs, citations, confidence = self.retriever.retrieve(query, conversation_id=conversation_id)
+        if plan.use_rag:
+            if not attached_filenames:
+                yield {
+                    "status": "complete",
+                    "answer": "ℹ️ There are no documents attached to this conversation. Please use the **📎 Attach Files** button at the bottom left to attach or select a document to query.",
+                    "query_type": plan.query_type,
+                    "citations": [],
+                    "tool_results": [],
+                }
+                return
+
+            yield {"status": "retrieving", "message": f"Searching across {len(attached_filenames)} attached document(s)..."}
+            retrieved_docs, citations, confidence = self.retriever.retrieve(
+                query,
+                conversation_id=conversation_id,
+                document_names=attached_filenames,
+            )
             if retrieved_docs:
                 context_str = self.retriever.build_context_prompt(retrieved_docs)
                 yield {
@@ -187,7 +233,7 @@ class KnowledgeAssistant:
             else:
                 yield {
                     "status": "retrieved",
-                    "message": "No relevant document context found in knowledge base.",
+                    "message": f"No relevant context found in attached document(s): {', '.join(attached_filenames)}.",
                     "confidence": confidence,
                 }
 
@@ -213,14 +259,50 @@ class KnowledgeAssistant:
             try:
                 llm_with_tools = llm.bind_tools(tools_to_bind)
                 yield {"status": "generating", "message": "Evaluating query with tool binding..."}
-                response = llm_with_tools.invoke(messages)
 
-                if hasattr(response, "tool_calls") and response.tool_calls:
+                response = None
+                try:
+                    response = llm_with_tools.invoke(messages)
+                except Exception as invoke_err:
+                    recovered = self._recover_failed_generation(invoke_err)
+                    if recovered:
+                        t_name, t_args = recovered
+                        yield {"status": "executing_tool", "message": f"Executing Tool: `{t_name}` args={t_args}"}
+                        target_tool = self.registry.get_tool(t_name)
+                        if target_tool:
+                            res_obj = execute_tool_safe(target_tool, t_args)
+                            tool_results.append(res_obj)
+                            yield {
+                                "status": "tool_result",
+                                "message": f"Tool `{t_name}` completed in {res_obj.execution_time_ms} ms.",
+                                "result": res_obj.result,
+                            }
+                            synth_prompt = (
+                                f"User question: {query}\n\n"
+                                f"Tool ({t_name}) result:\n{res_obj.result}\n\n"
+                                f"Please provide a direct, helpful, and natural language answer to the user based on the tool result. "
+                                f"Do not call any functions or tools."
+                            )
+                            yield {"status": "generating", "message": "Synthesizing response from tool output..."}
+                            final_res = llm.invoke([HumanMessage(content=synth_prompt)])
+                            final_answer = final_res.content
+                    if not final_answer:
+                        raise invoke_err
+
+                if not final_answer and response and hasattr(response, "tool_calls") and response.tool_calls:
                     messages.append(response)
+                    seen_calls = set()
                     for tc in response.tool_calls:
-                        t_name = tc.get("name")
+                        raw_name = tc.get("name", "")
+                        t_name = re.sub(r"<\|.*?\|>.*", "", raw_name).strip()
                         t_args = tc.get("args", {})
                         tc_id = tc.get("id")
+
+                        call_key = (t_name, json.dumps(t_args, sort_keys=True) if isinstance(t_args, dict) else str(t_args))
+                        if call_key in seen_calls:
+                            continue
+                        seen_calls.add(call_key)
+
                         yield {"status": "executing_tool", "message": f"Executing Tool: `{t_name}` args={t_args}"}
 
                         target_tool = self.registry.get_tool(t_name)
@@ -241,18 +323,36 @@ class KnowledgeAssistant:
                                 else:
                                     messages.append(AIMessage(content=f"Tool `{t_name}` output: {res_obj.result}"))
 
-                    if not final_answer:
+                    if not final_answer and tool_results:
                         yield {"status": "generating", "message": "Synthesizing response with tool outputs..."}
-                        final_response = llm_with_tools.invoke(messages)
-                        final_answer = final_response.content
-                else:
+                        tools_context = "\n\n".join([
+                            f"Tool: {tr.tool_name}\nResult:\n{tr.result}" for tr in tool_results if not tr.is_error
+                        ])
+                        synth_prompt = (
+                            f"User query: {query}\n\n"
+                            f"Tool Results:\n{tools_context}\n\n"
+                            f"Please provide a comprehensive, clear, and direct response answering the user's question using the information above. "
+                            f"Do not call any additional tools."
+                        )
+                        try:
+                            final_res = llm.invoke([HumanMessage(content=synth_prompt)])
+                            final_answer = final_res.content
+                        except Exception:
+                            final_response = llm_with_tools.invoke(messages)
+                            final_answer = final_response.content
+                elif not final_answer and response:
                     final_answer = response.content
 
             except Exception as e:
-                logger.warning("Tool-bound LLM invocation warning: %s; falling back to standard LLM", e)
+                logger.warning("Tool-bound LLM invocation warning: %s; falling back to direct prompt", e)
                 yield {"status": "generating", "message": "Generating final response..."}
                 try:
-                    res_msg = llm.invoke(messages)
+                    direct_prompt = (
+                        f"User query: {query}\n\n"
+                        f"Please provide a direct, helpful, and natural language response to the user. "
+                        f"Do not call any tools."
+                    )
+                    res_msg = llm.invoke([HumanMessage(content=direct_prompt)])
                     final_answer = res_msg.content
                 except Exception as fallback_err:
                     logger.error("LLM fallback failed: %s", fallback_err)
@@ -269,7 +369,6 @@ class KnowledgeAssistant:
         # Save Assistant Response to DB
         if conversation_id:
             try:
-                import json
                 with get_db() as db:
                     if db is not None:
                         conf_json = confidence.model_dump_json() if confidence else None
