@@ -14,18 +14,35 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.ui.theme import apply_theme
-from src.ui.components import (
-    render_header,
-    render_mcp_status,
-    render_system_status,
-    render_query_type_badge,
-    render_confidence_badge,
-    render_tool_call_card,
-    render_evaluation_dashboard,
-    render_attached_files_bar,
-    render_conversation_sidebar,
-    render_access_gate,
-)
+try:
+    from src.ui.components import (
+        render_header,
+        render_mcp_status,
+        render_system_status,
+        render_query_type_badge,
+        render_confidence_badge,
+        render_tool_call_card,
+        render_evaluation_dashboard,
+        render_attached_files_bar,
+        render_conversation_sidebar,
+        render_access_gate,
+    )
+except ImportError:
+    import importlib
+    import src.ui.components
+    importlib.reload(src.ui.components)
+    from src.ui.components import (
+        render_header,
+        render_mcp_status,
+        render_system_status,
+        render_query_type_badge,
+        render_confidence_badge,
+        render_tool_call_card,
+        render_evaluation_dashboard,
+        render_attached_files_bar,
+        render_conversation_sidebar,
+        render_access_gate,
+    )
 from src.rag.vector_store import ChromaVectorStore
 from src.services.document_service import document_service
 from src.assistant.assistant import KnowledgeAssistant

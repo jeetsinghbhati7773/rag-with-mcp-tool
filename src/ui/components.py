@@ -4,7 +4,6 @@ import os
 from typing import List, Dict, Any, Optional
 import streamlit as st
 from src.schemas.models import QueryType, ConfidenceScore, ToolCallResult, EvaluationMetrics
-from src.database.connection import database_health_check
 
 
 def render_header(
@@ -160,8 +159,11 @@ def render_tool_call_card(tool_result: ToolCallResult):
 def render_system_status(doc_count: int, chunk_count: int):
     """Renders sidebar system status panel with database health check."""
     groq_set = bool(os.getenv("GROQ_API_KEY") or (st.secrets.get("GROQ_API_KEY") if hasattr(st, "secrets") else None))
-    openai_set = bool(os.getenv("OPENAI_API_KEY") or (st.secrets.get("OPENAI_API_KEY") if hasattr(st, "secrets") else None))
-    db_health = database_health_check()
+    try:
+        from src.database.connection import database_health_check
+        db_health = database_health_check()
+    except Exception as dberr:
+        db_health = {"connected": False, "message": "PostgreSQL Driver Unavailable", "error": str(dberr)}
 
     db_status_str = "✅ Connected (PostgreSQL)" if db_health.get("connected") else "ℹ️ Offline (Local Fallback)"
 
@@ -225,9 +227,23 @@ def render_access_gate() -> bool:
     Blocks unauthenticated users until they enter the correct code defined in .env (APP_ACCESS_CODE).
     Returns True if access is granted, False otherwise.
     """
-    from src.config import settings
+    expected_code = None
+    try:
+        from src.config import settings
+        expected_code = settings.app_access_code
+    except Exception:
+        pass
+    if expected_code is None:
+        expected_code = os.getenv("APP_ACCESS_CODE")
+    if expected_code is None:
+        try:
+            expected_code = st.secrets.get("APP_ACCESS_CODE")
+        except Exception:
+            pass
+    if expected_code is None:
+        expected_code = "1234"
 
-    expected_code = (settings.app_access_code or "").strip()
+    expected_code = (expected_code or "").strip()
     if not expected_code:
         return True
 
